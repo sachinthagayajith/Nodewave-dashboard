@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industrial Environmental Monitoring System</title>
+
+    <!-- MQTT.js -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1a2847 50%, #0d1829 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #e5e7eb;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: slideDown 0.6s ease-out;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.8), rgba(26, 40, 71, 0.5));
+            padding: 30px 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 5px;
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .logo img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        h1 {
+            font-size: 44px;
+            margin-bottom: 5px;
+            background: linear-gradient(135deg, #3b82f6, #60a5fa, #93c5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            text-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #94a3b8;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: rgba(15, 23, 42, 0.7);
+            border-radius: 25px;
+            font-size: 14px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+        }
+
+        .status.connected {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: rgba(34, 197, 94, 0.4);
+            color: #86efac;
+        }
+
+        .status.disconnected {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status.connected .status-dot {
+            background: #22c55e;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+        }
+
+        .status.disconnected .status-dot {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.6));
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            animation: fadeInUp 0.6s ease-out;
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15), transparent);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 12px 40px rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .icon {
+            font-size: 40px;
+        }
+
+        .label {
+            font-size: 16px;
+            color: #93c5fd;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .value {
+            font-size: 56px;
+            font-weight: 700;
+            color: #e5e7eb;
+            margin: 15px 0;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .unit {
+            font-size: 24px;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 15px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            position: relative;
+            z-index: 1;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            font-size: 14px;
+            color: #cbd5e1;
+            position: relative;
+            z-index: 1;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .info-value {
+            color: #e5e7eb;
+            font-weight: 700;
+        }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.6));
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            animation: fadeInUp 0.6s ease-out 0.2s backwards;
+            transition: border-color 0.3s ease;
+        }
+
+        .chart-card:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #93c5fd;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .update-time {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 15px;
+            position: relative;
+            z-index: 1;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 32px;
+            }
+
+            .value {
+                font-size: 40px;
+            }
+
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+
+            .logo {
+                width: 60px;
+                height: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <img src="file:///e:/download/ChatGPT Image Nov 17, 2025, 08_18_07 PM.png" alt="Company Logo">
+            </div>
+            <div>
+                <h1>Industrial Environmental Monitoring System</h1>
+                <p class="subtitle">Real-Time Sensor Data Analytics</p>
+            </div>
+        </div>
+        <div class="status connected" id="status">
+            <span class="status-dot"></span>
+            <span id="status-text">Connected</span>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <!-- Temperature Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">🌡️</span>
+                <span class="label">Temperature</span>
+            </div>
+            <div class="value">
+                <span id="temp">--</span>
+                <span class="unit">°C</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="temp-progress" style="width: 0%"></div>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Maximum:</span>
+                <span class="info-value" id="temp-max">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Minimum:</span>
+                <span class="info-value" id="temp-min">--</span>
+            </div>
+            <div class="update-time" id="temp-time">No data yet</div>
+        </div>
+
+        <!-- Humidity Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="icon">💧</span>
+                <span class="label">Humidity</span>
+            </div>
+            <div class="value">
+                <span id="hum">--</span>
+                <span class="unit">%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="hum-progress" style="width: 0%; background: linear-gradient(90deg, #06b6d4, #0891b2);"></div>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Maximum:</span>
+                <span class="info-value" id="hum-max">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Minimum:</span>
+                <span class="info-value" id="hum-min">--</span>
+            </div>
+            <div class="update-time" id="hum-time">No data yet</div>
+        </div>
+    </div>
+
+    <div class="charts-section">
+        <div class="chart-card">
+            <div class="chart-title">📈 Temperature Trend</div>
+            <canvas id="tempChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">💧 Humidity Trend</div>
+            <canvas id="humChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // HiveMQ WebSocket URL
+    const brokerUrl = "wss://830d736080cf4f9d89f0b9864091d968.s1.eu.hivemq.cloud:8884/mqtt";
+
+    const options = {
+        username: "Sachintha1",
+        password: "Sa1357tha.",
+        clean: true,
+        connectTimeout: 4000,
+        clientId: "web-dashboard-" + Math.random().toString(16).substr(2, 8)
+    };
+
+    let tempData = [];
+    let humData = [];
+    const maxDataPoints = 30;
+
+    let tempChart, humChart;
+
+    function initCharts() {
+        const tempCtx = document.getElementById("tempChart").getContext("2d");
+        const humCtx = document.getElementById("humChart").getContext("2d");
+
+        tempChart = new Chart(tempCtx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Temperature (°C)",
+                    data: [],
+                    borderColor: "#3b82f6",
+                    backgroundColor: "rgba(59, 130, 246, 0.1)",
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 3,
+                    pointRadius: 5,
+                    pointBackgroundColor: "#60a5fa",
+                    pointBorderColor: "#3b82f6",
+                    pointBorderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: "#94a3b8",
+                            font: { size: 12 }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 50,
+                        ticks: { color: "#64748b" },
+                        grid: { color: "rgba(59, 130, 246, 0.1)" }
+                    },
+                    x: {
+                        ticks: { color: "#64748b" },
+                        grid: { color: "rgba(59, 130, 246, 0.1)" }
+                    }
+                }
+            }
+        });
+
+        humChart = new Chart(humCtx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Humidity (%)",
+                    data: [],
+                    borderColor: "#06b6d4",
+                    backgroundColor: "rgba(6, 182, 212, 0.1)",
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 3,
+                    pointRadius: 5,
+                    pointBackgroundColor: "#22d3ee",
+                    pointBorderColor: "#06b6d4",
+                    pointBorderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: "#94a3b8",
+                            font: { size: 12 }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        ticks: { color: "#64748b" },
+                        grid: { color: "rgba(6, 182, 212, 0.1)" }
+                    },
+                    x: {
+                        ticks: { color: "#64748b" },
+                        grid: { color: "rgba(6, 182, 212, 0.1)" }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateCharts() {
+        const now = new Date().toLocaleTimeString();
+
+        tempChart.data.labels.push(now);
+        humChart.data.labels.push(now);
+
+        tempChart.data.datasets[0].data = tempData;
+        humChart.data.datasets[0].data = humData;
+
+        if (tempChart.data.labels.length > maxDataPoints) {
+            tempChart.data.labels.shift();
+            humChart.data.labels.shift();
+            tempChart.data.datasets[0].data.shift();
+            humChart.data.datasets[0].data.shift();
+        }
+
+        tempChart.update();
+        humChart.update();
+    }
+
+    console.log("Connecting to HiveMQ...");
+    const client = mqtt.connect(brokerUrl, options);
+
+    client.on("connect", function () {
+        console.log("Connected to MQTT!");
+        document.getElementById("status").className = "status connected";
+        document.getElementById("status-text").innerText = "Connected";
+        client.subscribe("esp32/dht");
+        initCharts();
+    });
+
+    client.on("message", function (topic, message) {
+        try {
+            const data = JSON.parse(message.toString());
+            const temp = parseFloat(data.temp);
+            const hum = parseFloat(data.hum);
+
+            document.getElementById("temp").innerText = temp.toFixed(1);
+            document.getElementById("hum").innerText = hum.toFixed(1);
+
+            document.getElementById("temp-progress").style.width = ((temp / 50) * 100) + "%";
+            document.getElementById("hum-progress").style.width = hum + "%";
+
+            tempData.push(temp);
+            humData.push(hum);
+
+            document.getElementById("temp-max").innerText = Math.max(...tempData).toFixed(1);
+            document.getElementById("temp-min").innerText = Math.min(...tempData).toFixed(1);
+            document.getElementById("hum-max").innerText = Math.max(...humData).toFixed(1);
+            document.getElementById("hum-min").innerText = Math.min(...humData).toFixed(1);
+
+            const time = new Date().toLocaleTimeString();
+            document.getElementById("temp-time").innerText = "Updated: " + time;
+            document.getElementById("hum-time").innerText = "Updated: " + time;
+
+            updateCharts();
+
+        } catch (e) {
+            console.error("Invalid JSON", e);
+        }
+    });
+
+    client.on("error", function (error) {
+        console.error("MQTT Error:", error);
+        document.getElementById("status").className = "status disconnected";
+        document.getElementById("status-text").innerText = "Disconnected";
+    });
+</script>
+
+</body>
+</html>
